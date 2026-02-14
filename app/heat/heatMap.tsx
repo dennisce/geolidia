@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 
-export function Welcome() {
+export function HeatMap() {
   const [Map, setMap] = useState<any>(null)
 
   useEffect(() => {
-    import("../components/Map").then(m => setMap(() => m.default))
+    import("../components/HeatMap").then(m => setMap(() => m.default))
   }, [])
 
   if (!Map) return null
