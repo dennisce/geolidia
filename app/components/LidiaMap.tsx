@@ -9,9 +9,13 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css"
 
 import { getAssistantLoadingMessage } from "./assistantLoadingMessage"
 import { Tiles } from "./Tiles"
-import { LayersControl, type IndicatorKey } from "./LayersControl"
-import { ColorScaleSelector } from "./ColorScaleSelector"
-import { COLOR_SCALES, type ColorScaleKey } from "./tiles.helpers"
+import {
+  LayersControl,
+  type IndicatorKey,
+  type IndicatorLayerConfig,
+  type VisualizationType,
+} from "./LayersControl"
+import type { ColorScaleKey } from "./tiles.helpers"
 
 type JsonItems = Array<{
   json: {
@@ -28,45 +32,17 @@ type Item = {
   message: string
 }
 
-type IndicatorLayerConfig = {
-  key: IndicatorKey
-  label: string
-  desc: string
-  uf: string | number
-  visible: boolean
-  minZoom?: number
-  minValue?: number
-  maxValue?: number
-}
-
 const MAP_CENTER: [number, number] = [-3.73, -38.52]
 const MAP_ZOOM = 7
 const TILE_LAYER_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 const START_URL = "https://webhooks.opusapp.com.br/webhook/geolidia/start"
 const QUESTION_URL = "https://webhooks.opusapp.com.br/webhook/geolidia/question"
+const INDICATORS_BASE_URL = "https://tiles.opusapp.com.br"
 
 const INDICATOR_SCALE: Record<IndicatorKey, { min: number; max: number }> = {
   total_domicilios: { min: 0, max: 25000 },
   renda_media: { min: 0, max: 1000 },
 }
-
-const DEFAULT_ACTIVE_INDICATOR: IndicatorKey = "renda_media"
-const COLOR_OPTIONS: Array<{
-  key: ColorScaleKey
-  label: string
-  colors: string[]
-}> = [
-  { key: "reds", label: "Vermelho", colors: COLOR_SCALES.reds },
-  { key: "blues", label: "Azul", colors: COLOR_SCALES.blues },
-  { key: "greens", label: "Verde", colors: COLOR_SCALES.greens },
-  { key: "purples", label: "Roxo", colors: COLOR_SCALES.purples },
-  { key: "oranges", label: "Laranja", colors: COLOR_SCALES.oranges },
-  { key: "teal", label: "Turquesa", colors: COLOR_SCALES.teal },
-  { key: "pink", label: "Rosa", colors: COLOR_SCALES.pink },
-  { key: "slate", label: "Cinza azulado", colors: COLOR_SCALES.slate },
-  { key: "yellow", label: "Amarelo", colors: COLOR_SCALES.yellow },
-  { key: "indigo", label: "Índigo", colors: COLOR_SCALES.indigo },
-]
 
 function AssistantToast({
   show,
@@ -184,6 +160,99 @@ function SearchBar({
   )
 }
 
+function HeatmapLayer({ indicator }: { indicator: IndicatorLayerConfig }) {
+  const map = useMap()
+
+  useEffect(() => {
+    let cancelled = false
+    let heatLayer: any = null
+
+    async function load() {
+      try {
+        const url = `${INDICATORS_BASE_URL}/indicators?indicators=${indicator.key}&uf=${indicator.uf}`
+        const res = await fetch(url)
+        const json = await res.json()
+
+        if (cancelled) return
+
+        const points = Object.values(json)
+          .map((row: any) => {
+            const lat = Number(row.lat)
+            const lon = Number(row.lon)
+            const value = Number(row[indicator.key] ?? 0)
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+            return [lat, lon, value] as [number, number, number]
+          })
+          .filter(Boolean) as [number, number, number][]
+
+        if (!points.length) return
+
+        heatLayer = (L as any).heatLayer(points, {
+          radius: 25,
+          blur: 20,
+          maxZoom: 17,
+          minOpacity: 0.35,
+        })
+
+        heatLayer.addTo(map)
+      } catch (error) {
+        console.error("Erro ao carregar heatmap:", error)
+      }
+    }
+
+    load()
+
+    return () => {
+      cancelled = true
+      if (heatLayer && map.hasLayer(heatLayer)) {
+        map.removeLayer(heatLayer)
+      }
+    }
+  }, [indicator, map])
+
+  return null
+}
+
+function MapIndicatorLayers({
+  layers,
+}: {
+  layers: IndicatorLayerConfig[]
+}) {
+  return (
+    <>
+      {layers.map((layer) => {
+        if (layer.visualization === "choropleth") {
+          return (
+            <Tiles
+              key={`${layer.key}-choropleth`}
+              uf={layer.uf}
+              indicators={[layer.key]}
+              colorIndicator={layer.key}
+              colorScale={layer.colorScale}
+              visible={true}
+              minZoom={layer.minZoom}
+              minValue={layer.minValue}
+              maxValue={layer.maxValue}
+            />
+          )
+        }
+
+        if (layer.visualization === "heatmap") {
+          return (
+            <HeatmapLayer
+              key={`${layer.key}-heatmap`}
+              indicator={layer}
+            />
+          )
+        }
+
+        return null
+      })}
+    </>
+  )
+}
+
 function MarkersLayer({ data }: { data: Item[] }) {
   const map = useMap()
 
@@ -210,7 +279,9 @@ function MarkersLayer({ data }: { data: Item[] }) {
     let cleanup: (() => void) | undefined
 
     if (mapType === "heatmap") {
-      const heatPoints = points.map(({ json }) => [json.lat, json.lon, 100] as [number, number, number])
+      const heatPoints = points.map(
+        ({ json }) => [json.lat, json.lon, 100] as [number, number, number]
+      )
 
       const heat = (L as any).heatLayer(heatPoints, {
         radius: 25,
@@ -251,7 +322,7 @@ export default function LidiaMap() {
   const [loading, setLoading] = useState(false)
   const [assistantReply, setAssistantReply] = useState("")
   const [showToast, setShowToast] = useState(false)
-  const [selectedColorScale, setSelectedColorScale] = useState<ColorScaleKey>("reds")
+
   const [indicatorLayers, setIndicatorLayers] = useState<IndicatorLayerConfig[]>([
     {
       key: "total_domicilios",
@@ -259,6 +330,9 @@ export default function LidiaMap() {
       desc: "Total de domicílios por bairro ou setor censitário.",
       uf: 23,
       visible: true,
+      visualization: "choropleth",
+      supportedVisualizations: ["choropleth", "heatmap"],
+      colorScale: "reds",
       minZoom: 7,
       minValue: INDICATOR_SCALE.total_domicilios.min,
       maxValue: INDICATOR_SCALE.total_domicilios.max,
@@ -269,6 +343,9 @@ export default function LidiaMap() {
       desc: "Renda média por bairro ou setor censitário.",
       uf: 23,
       visible: true,
+      visualization: "choropleth",
+      supportedVisualizations: ["choropleth", "heatmap"],
+      colorScale: "blues",
       minZoom: 7,
       minValue: INDICATOR_SCALE.renda_media.min,
       maxValue: INDICATOR_SCALE.renda_media.max,
@@ -278,21 +355,6 @@ export default function LidiaMap() {
   const visibleIndicatorLayers = useMemo(
     () => indicatorLayers.filter((layer) => layer.visible),
     [indicatorLayers]
-  )
-
-  const activeIndicators = useMemo(
-    () => visibleIndicatorLayers.map((layer) => layer.key),
-    [visibleIndicatorLayers]
-  )
-
-  const colorIndicator = useMemo<IndicatorKey | undefined>(
-    () => visibleIndicatorLayers[0]?.key ?? DEFAULT_ACTIVE_INDICATOR,
-    [visibleIndicatorLayers]
-  )
-
-  const colorIndicatorConfig = useMemo(
-    () => indicatorLayers.find((layer) => layer.key === colorIndicator),
-    [indicatorLayers, colorIndicator]
   )
 
   const showAssistantToast = useCallback((message: string) => {
@@ -347,20 +409,6 @@ export default function LidiaMap() {
     let cancelled = false
 
     const loadInitialPoints = async () => {
-      return
-    }
-
-    loadInitialPoints()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-  // Carga inicial do mapa com pontos sugeridos pelo backend.
-  useEffect(() => {
-    let cancelled = false
-
-    const loadInitialPoints = async () => {
       try {
         const response = await fetch(START_URL)
         if (!response.ok) {
@@ -392,23 +440,34 @@ export default function LidiaMap() {
     )
   }, [])
 
+  const handleChangeVisualization = useCallback(
+    (key: IndicatorKey, next: VisualizationType) => {
+      setIndicatorLayers((prev) =>
+        prev.map((layer) =>
+          layer.key === key ? { ...layer, visualization: next } : layer
+        )
+      )
+    },
+    []
+  )
+
+  const handleChangeColorScale = useCallback(
+    (key: IndicatorKey, next: ColorScaleKey) => {
+      setIndicatorLayers((prev) =>
+        prev.map((layer) =>
+          layer.key === key ? { ...layer, colorScale: next } : layer
+        )
+      )
+    },
+    []
+  )
+
   return (
     <div className="relative h-screen w-full">
       <MapContainer center={MAP_CENTER} zoom={MAP_ZOOM} style={{ height: "100vh", width: "100%" }}>
         <TileLayer url={TILE_LAYER_URL} />
 
-        {activeIndicators.length > 0 && colorIndicatorConfig && (
-          <Tiles
-            uf={23}
-            indicators={activeIndicators}
-            colorIndicator={colorIndicator}
-            colorScale={selectedColorScale}
-            visible={true}
-            minZoom={colorIndicatorConfig.minZoom ?? 7}
-            minValue={colorIndicatorConfig.minValue ?? 0}
-            maxValue={colorIndicatorConfig.maxValue ?? 100}
-          />
-        )}
+        <MapIndicatorLayers layers={visibleIndicatorLayers} />
 
         <MarkersLayer data={points} />
       </MapContainer>
@@ -429,12 +488,8 @@ export default function LidiaMap() {
       <LayersControl
         layers={indicatorLayers}
         onToggleLayer={handleToggleLayer}
-      />
-
-      <ColorScaleSelector
-        options={COLOR_OPTIONS}
-        selectedKey={selectedColorScale}
-        onChange={(key) => setSelectedColorScale(key as ColorScaleKey)}
+        onChangeVisualization={handleChangeVisualization}
+        onChangeColorScale={handleChangeColorScale}
       />
     </div>
   )

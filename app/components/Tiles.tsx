@@ -74,23 +74,15 @@ export function Tiles({
         setDataReady(false)
 
         const response = await fetch(indicatorsUrl)
-        if (!response.ok) {
-          throw new Error(`Erro ao carregar indicadores: ${response.status}`)
-        }
+        const json = await response.json()
 
-        const json = (await response.json()) as IndicatorPayload
         if (cancelled) return
-
         setIndicatorsData(json ?? {})
       } catch (error) {
-        console.error("Erro ao carregar indicadores:", error)
-
-        if (cancelled) return
-        setIndicatorsData({})
+        console.error(error)
+        if (!cancelled) setIndicatorsData({})
       } finally {
-        if (!cancelled) {
-          setDataReady(true)
-        }
+        if (!cancelled) setDataReady(true)
       }
     }
 
@@ -101,42 +93,11 @@ export function Tiles({
     }
   }, [indicatorsUrl, indicators])
 
-  function handleClick(e: any) {
-    const props = e?.layer?.properties
-    const latlng = e?.latlng
-    if (!props || !latlng) return
-
-    const featureId = String(props.feature_id ?? "-")
-    const nomeBairro = props.nome_bairro ?? "-"
-    const nomeMunicipio = props.nome_municipio ?? "-"
-    const tipo = props.feature_tipo ?? "-"
-
-    const metricsHtml = indicators
-      .map((indicatorName) => {
-        const value = getIndicatorValue(indicatorsData, featureId, indicatorName)
-        return `<br/>${indicatorName}: ${value}`
-      })
-      .join("")
-
-    L.popup()
-      .setLatLng(latlng)
-      .setContent(
-        `<b>${nomeBairro}</b><br/>Município: ${nomeMunicipio}<br/>Tipo: ${tipo}${metricsHtml}`
-      )
-      .openOn(map)
-  }
-
   function removeLayer() {
     if (!gridRef.current) return
-
-    try {
-      gridRef.current.off("click", handleClick)
-    } catch {}
-
     if (map.hasLayer(gridRef.current)) {
       map.removeLayer(gridRef.current)
     }
-
     gridRef.current = null
   }
 
@@ -154,16 +115,12 @@ export function Tiles({
       vectorTileLayerStyles: {
         [MVT_LAYER_NAME]: styleFor,
       },
-      getFeatureId: (feature: any) => feature?.properties?.feature_id,
     })
 
-    vectorGrid.on("click", handleClick)
     vectorGrid.addTo(map)
     gridRef.current = vectorGrid
 
-    return () => {
-      removeLayer()
-    }
+    return () => removeLayer()
   }, [map, pbfUrl, styleFor, visible, dataReady, minZoom])
 
   return null
