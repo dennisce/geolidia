@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useMap } from "react-leaflet"
 import L from "leaflet"
-import "leaflet.vectorgrid"
+import "leaflet.vectorgrid/dist/Leaflet.VectorGrid.bundled.js"
 
 import {
   buildIndicatorsUrl,
