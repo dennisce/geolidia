@@ -118,6 +118,66 @@ export function Tiles({
     })
 
     vectorGrid.addTo(map)
+
+    const handleClick = (event: any) => {
+      const properties = event?.layer?.properties
+      const latlng = event?.latlng
+
+      if (!properties || !latlng) return
+
+      const featureId = properties.feature_id
+      const indicatorItem = featureId ? indicatorsData?.[featureId] : null
+console.log(indicatorsData, featureId, indicatorItem)
+      const localLabel =
+        properties.feature_tipo === "setor"
+          ? "Setor censitário"
+          : properties.nome_bairro || "Bairro"
+
+      const nomeMunicipio = properties.nome_municipio ?? "-"
+      const ufValue = properties.uf ?? uf
+
+      const hiddenFields = new Set([
+        "feature_id",
+        "feature_tipo",
+        "cod_municipio_ibge",
+        "nome_municipio",
+        "nome_bairro",
+        "uf",
+        "lat",
+        "lon",
+      ])
+
+      const indicatorsHtml = indicatorItem
+        ? Object.entries(indicatorItem)
+            .filter(([key, value]) => {
+              if (hiddenFields.has(key)) return false
+              if (value === null || value === undefined || value === "") return false
+              return true
+            })
+            .map(([key, value]) => {
+              const label = key
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (char) => char.toUpperCase())
+
+              return `<div><b>${label}:</b> ${value}</div>`
+            })
+            .join("")
+        : "<div>Sem indicadores disponíveis</div>"
+
+      L.popup()
+        .setLatLng(latlng)
+        .setContent(`
+          <div>
+            <b>${nomeMunicipio} (${ufValue})</b><br/>
+            ${localLabel}<br/><br/>
+            ${indicatorsHtml}
+          </div>
+        `)
+        .openOn(map)
+    }
+
+    vectorGrid.on("click", handleClick)
+
     gridRef.current = vectorGrid
 
     return () => removeLayer()
