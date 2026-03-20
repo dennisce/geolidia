@@ -15,7 +15,11 @@ import {
   type IndicatorLayerConfig,
   type VisualizationType,
 } from "./LayersControl"
-import type { ColorScaleKey } from "./tiles.helpers"
+import {
+  buildIndicatorsUrl,
+  type ColorScaleKey,
+  type IndicatorPayload,
+} from "./tiles.helpers"
 
 type JsonItems = Array<{
   json: {
@@ -160,64 +164,60 @@ function SearchBar({
   )
 }
 
-function HeatmapLayer({ indicator }: { indicator: IndicatorLayerConfig }) {
+function HeatmapLayer({
+  indicator,
+  indicatorsData,
+}: {
+  indicator: IndicatorLayerConfig
+  indicatorsData: IndicatorPayload
+}) {
   const map = useMap()
 
+  const points = useMemo(() => {
+    return Object.values(indicatorsData)
+      .map((row) => {
+        const lat = Number(row.lat)
+        const lon = Number(row.lon)
+        const value = Number(row[indicator.key] ?? 0)
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+        if (!Number.isFinite(value) || value <= 0) return null
+
+        return [lat, lon, value] as [number, number, number]
+      })
+      .filter(Boolean) as [number, number, number][]
+  }, [indicatorsData, indicator.key])
+
   useEffect(() => {
-    let cancelled = false
     let heatLayer: any = null
 
-    async function load() {
-      try {
-        const url = `${INDICATORS_BASE_URL}/indicators?indicators=${indicator.key}&uf=${indicator.uf}`
-        const res = await fetch(url)
-        const json = await res.json()
+    if (!points.length) return
 
-        if (cancelled) return
+    heatLayer = (L as any).heatLayer(points, {
+      radius: 25,
+      blur: 20,
+      maxZoom: 17,
+      minOpacity: 0.35,
+    })
 
-        const points = Object.values(json)
-          .map((row: any) => {
-            const lat = Number(row.lat)
-            const lon = Number(row.lon)
-            const value = Number(row[indicator.key] ?? 0)
-
-            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
-            return [lat, lon, value] as [number, number, number]
-          })
-          .filter(Boolean) as [number, number, number][]
-
-        if (!points.length) return
-
-        heatLayer = (L as any).heatLayer(points, {
-          radius: 25,
-          blur: 20,
-          maxZoom: 17,
-          minOpacity: 0.35,
-        })
-
-        heatLayer.addTo(map)
-      } catch (error) {
-        console.error("Erro ao carregar heatmap:", error)
-      }
-    }
-
-    load()
+    heatLayer.addTo(map)
 
     return () => {
-      cancelled = true
       if (heatLayer && map.hasLayer(heatLayer)) {
         map.removeLayer(heatLayer)
       }
     }
-  }, [indicator, map])
+  }, [map, points])
 
   return null
 }
 
 function MapIndicatorLayers({
   layers,
+  indicatorsData,
 }: {
   layers: IndicatorLayerConfig[]
+  indicatorsData: IndicatorPayload
 }) {
   return (
     <>
@@ -228,6 +228,7 @@ function MapIndicatorLayers({
               key={`${layer.key}-choropleth`}
               uf={layer.uf}
               indicators={[layer.key]}
+              indicatorsData={indicatorsData}
               colorIndicator={layer.key}
               colorScale={layer.colorScale}
               visible={true}
@@ -243,6 +244,7 @@ function MapIndicatorLayers({
             <HeatmapLayer
               key={`${layer.key}-heatmap`}
               indicator={layer}
+              indicatorsData={indicatorsData}
             />
           )
         }
@@ -322,6 +324,8 @@ export default function LidiaMap() {
   const [loading, setLoading] = useState(false)
   const [assistantReply, setAssistantReply] = useState("")
   const [showToast, setShowToast] = useState(false)
+  const [indicatorsData, setIndicatorsData] = useState<IndicatorPayload>({})
+  const [layersControlCollapsed, setLayersControlCollapsed] = useState(false)
 
   const [indicatorLayers, setIndicatorLayers] = useState<IndicatorLayerConfig[]>([
     {
@@ -356,6 +360,24 @@ export default function LidiaMap() {
     () => indicatorLayers.filter((layer) => layer.visible),
     [indicatorLayers]
   )
+
+  const activeIndicatorKeys = useMemo(() => {
+    return Array.from(new Set(visibleIndicatorLayers.map((layer) => layer.key)))
+  }, [visibleIndicatorLayers])
+
+  const sharedUf = useMemo(() => {
+    return visibleIndicatorLayers[0]?.uf
+  }, [visibleIndicatorLayers])
+
+  const indicatorsUrl = useMemo(() => {
+    if (!activeIndicatorKeys.length) return null
+
+    return buildIndicatorsUrl({
+      baseUrl: INDICATORS_BASE_URL,
+      indicators: activeIndicatorKeys,
+      uf: sharedUf,
+    })
+  }, [activeIndicatorKeys, sharedUf])
 
   const showAssistantToast = useCallback((message: string) => {
     setShowToast(false)
@@ -432,6 +454,42 @@ export default function LidiaMap() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadIndicators() {
+      if (!indicatorsUrl) {
+        setIndicatorsData({})
+        return
+      }
+
+      try {
+        const response = await fetch(indicatorsUrl)
+
+        if (!response.ok) {
+          throw new Error(`GET /indicators falhou (${response.status})`)
+        }
+
+        const payload = await response.json()
+
+        if (!cancelled) {
+          setIndicatorsData(payload ?? {})
+        }
+      } catch (error) {
+        console.error("Erro ao carregar indicadores:", error)
+        if (!cancelled) {
+          setIndicatorsData({})
+        }
+      }
+    }
+
+    loadIndicators()
+
+    return () => {
+      cancelled = true
+    }
+  }, [indicatorsUrl])
+
   const handleToggleLayer = useCallback((key: IndicatorKey, next: boolean) => {
     setIndicatorLayers((prev) =>
       prev.map((layer) =>
@@ -464,10 +522,31 @@ export default function LidiaMap() {
 
   return (
     <div className="relative h-screen w-full">
+      <button
+        onClick={() => setLayersControlCollapsed((prev) => !prev)}
+        className="
+          absolute left-4 top-10 z-[9999] w-[360px]
+          bg-black/40 backdrop-blur-xl
+          border border-white/10
+          text-white
+          px-4 py-2
+          rounded-xl
+          text-sm
+          shadow-lg
+          hover:bg-black/60
+          transition
+        "
+        type="button"
+      >
+        {layersControlCollapsed ? "Mostrar indicadores" : "Ocultar indicadores"}
+      </button>
       <MapContainer center={MAP_CENTER} zoom={MAP_ZOOM} style={{ height: "100vh", width: "100%" }}>
         <TileLayer url={TILE_LAYER_URL} />
 
-        <MapIndicatorLayers layers={visibleIndicatorLayers} />
+        <MapIndicatorLayers
+          layers={visibleIndicatorLayers}
+          indicatorsData={indicatorsData}
+        />
 
         <MarkersLayer data={points} />
       </MapContainer>
@@ -490,6 +569,7 @@ export default function LidiaMap() {
         onToggleLayer={handleToggleLayer}
         onChangeVisualization={handleChangeVisualization}
         onChangeColorScale={handleChangeColorScale}
+        collapsed={layersControlCollapsed}
       />
     </div>
   )

@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet.vectorgrid/dist/Leaflet.VectorGrid.bundled.js"
 
 import {
-  buildIndicatorsUrl,
   buildPbfUrl,
   buildStyleFor,
-  getIndicatorValue,
   MVT_LAYER_NAME,
-  type IndicatorPayload,
   type TilesProps,
 } from "./tiles.helpers"
 
@@ -18,6 +15,7 @@ export function Tiles({
   codMun,
   featureTipo,
   indicators = [],
+  indicatorsData = {},
   colorIndicator,
   colorScale = "reds",
   baseUrl = "https://tiles.opusapp.com.br",
@@ -29,9 +27,6 @@ export function Tiles({
   const map = useMap()
   const gridRef = useRef<any>(null)
 
-  const [indicatorsData, setIndicatorsData] = useState<IndicatorPayload>({})
-  const [dataReady, setDataReady] = useState(false)
-
   const pbfUrl = useMemo(() => {
     return buildPbfUrl({
       baseUrl,
@@ -40,15 +35,6 @@ export function Tiles({
       featureTipo,
     })
   }, [baseUrl, uf, codMun, featureTipo])
-
-  const indicatorsUrl = useMemo(() => {
-    return buildIndicatorsUrl({
-      baseUrl,
-      indicators,
-      uf,
-      codMun,
-    })
-  }, [baseUrl, indicators, uf, codMun])
 
   const styleFor = useMemo(() => {
     return buildStyleFor({
@@ -60,39 +46,6 @@ export function Tiles({
     })
   }, [indicatorsData, colorIndicator, colorScale, minValue, maxValue])
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadIndicators() {
-      if (!indicatorsUrl || !indicators.length) {
-        setIndicatorsData({})
-        setDataReady(true)
-        return
-      }
-
-      try {
-        setDataReady(false)
-
-        const response = await fetch(indicatorsUrl)
-        const json = await response.json()
-
-        if (cancelled) return
-        setIndicatorsData(json ?? {})
-      } catch (error) {
-        console.error(error)
-        if (!cancelled) setIndicatorsData({})
-      } finally {
-        if (!cancelled) setDataReady(true)
-      }
-    }
-
-    loadIndicators()
-
-    return () => {
-      cancelled = true
-    }
-  }, [indicatorsUrl, indicators])
-
   function removeLayer() {
     if (!gridRef.current) return
     if (map.hasLayer(gridRef.current)) {
@@ -102,7 +55,7 @@ export function Tiles({
   }
 
   useEffect(() => {
-    if (!visible || !dataReady) {
+    if (!visible) {
       removeLayer()
       return
     }
@@ -127,7 +80,7 @@ export function Tiles({
 
       const featureId = properties.feature_id
       const indicatorItem = featureId ? indicatorsData?.[featureId] : null
-console.log(indicatorsData, featureId, indicatorItem)
+
       const localLabel =
         properties.feature_tipo === "setor"
           ? "Setor censitário"
@@ -181,7 +134,16 @@ console.log(indicatorsData, featureId, indicatorItem)
     gridRef.current = vectorGrid
 
     return () => removeLayer()
-  }, [map, pbfUrl, styleFor, visible, dataReady, minZoom])
+  }, [
+    map,
+    pbfUrl,
+    styleFor,
+    visible,
+    minZoom,
+    indicatorsData,
+    uf,
+    indicators,
+  ])
 
   return null
 }

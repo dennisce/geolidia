@@ -4,6 +4,8 @@ export type IndicatorRow = {
   uf?: string
   cod_municipio_ibge?: number
   nome_bairro?: string
+  lat?: number | string
+  lon?: number | string
   [key: string]: string | number | undefined
 }
 
@@ -39,6 +41,7 @@ export type TilesProps = {
   codMun?: number
   featureTipo?: FeatureTipo
   indicators?: string[]
+  indicatorsData?: IndicatorPayload
   colorIndicator?: string
   colorScale?: ColorScaleKey
   baseUrl?: string
@@ -100,7 +103,7 @@ export function buildPbfUrl(params: {
   }
 
   if (featureTipo) {
-    qs.set("feature_tipo", ["bairro", "setor"].join(","))
+    qs.set("feature_tipo", featureTipo)
   }
 
   return `${baseUrl}/tiles/map-features/{z}/{x}/{y}.pbf?${qs.toString()}`

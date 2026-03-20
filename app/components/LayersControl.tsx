@@ -26,6 +26,7 @@ type Props = {
   onToggleLayer: (key: IndicatorKey, next: boolean) => void
   onChangeVisualization: (key: IndicatorKey, next: VisualizationType) => void
   onChangeColorScale: (key: IndicatorKey, next: ColorScaleKey) => void
+  collapsed?: boolean
 }
 
 const COLOR_OPTIONS: Array<{
@@ -70,9 +71,19 @@ export function LayersControl({
   onToggleLayer,
   onChangeVisualization,
   onChangeColorScale,
+  collapsed = false,
 }: Props) {
   return (
-    <div className="absolute left-4 top-24 z-[9999] w-[360px]">
+    <div className={`
+                    absolute left-4 top-24 z-[9999] w-[360px]
+                    bg-black/40 backdrop-blur-xl
+                    border border-white/10
+                    rounded-2xl
+                    shadow-[0_0_40px_rgba(124,58,237,0.15)]
+                    overflow-hidden
+                    transition-all duration-300
+                    ${collapsed ? "w-0 opacity-0 pointer-events-none p-0 border-transparent" : "w-[360px] opacity-100 p-4"}
+                  `}>
       <div className="rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-md shadow-xl">
         <div className="px-4 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">Camadas</h3>
