@@ -1,4 +1,4 @@
-export type FeatureTipo = "bairro" | "setor"
+export type FeatureTipo = "bairro" | "setor" | "bairro,setor"
 
 export type IndicatorRow = {
   uf?: string

@@ -19,7 +19,10 @@ import {
   buildIndicatorsUrl,
   type ColorScaleKey,
   type IndicatorPayload,
+  type FeatureTipo,
 } from "./tiles.helpers"
+import { HeatmapLayer } from "./HeatmapLayer"
+import { MapIndicatorLayers } from "./MapIndicatorLayers"
 
 type JsonItems = Array<{
   json: {
@@ -163,7 +166,7 @@ function SearchBar({
     </div>
   )
 }
-
+/*
 function HeatmapLayer({
   indicator,
   indicatorsData,
@@ -215,9 +218,11 @@ function HeatmapLayer({
 function MapIndicatorLayers({
   layers,
   indicatorsData,
+  featureTipo
 }: {
   layers: IndicatorLayerConfig[]
   indicatorsData: IndicatorPayload
+  featureTipo: FeatureTipo
 }) {
   return (
     <>
@@ -225,8 +230,9 @@ function MapIndicatorLayers({
         if (layer.visualization === "choropleth") {
           return (
             <Tiles
-              key={`${layer.key}-choropleth`}
+              key={`${layer.key}-choropleth-${featureTipo}`}
               uf={layer.uf}
+              featureTipo={featureTipo}
               indicators={[layer.key]}
               indicatorsData={indicatorsData}
               colorIndicator={layer.key}
@@ -242,9 +248,10 @@ function MapIndicatorLayers({
         if (layer.visualization === "heatmap") {
           return (
             <HeatmapLayer
-              key={`${layer.key}-heatmap`}
+              key={`${layer.key}-heatmap-${featureTipo}`}
               indicator={layer}
               indicatorsData={indicatorsData}
+              featureTipo={featureTipo}
             />
           )
         }
@@ -254,7 +261,7 @@ function MapIndicatorLayers({
     </>
   )
 }
-
+*/
 function MarkersLayer({ data }: { data: Item[] }) {
   const map = useMap()
 
@@ -326,6 +333,7 @@ export default function LidiaMap() {
   const [showToast, setShowToast] = useState(false)
   const [indicatorsData, setIndicatorsData] = useState<IndicatorPayload>({})
   const [layersControlCollapsed, setLayersControlCollapsed] = useState(false)
+  const [featureTipo, setFeatureTipo] = useState<FeatureTipo>("bairro,setor")
 
   const [indicatorLayers, setIndicatorLayers] = useState<IndicatorLayerConfig[]>([
     {
@@ -546,6 +554,7 @@ export default function LidiaMap() {
         <MapIndicatorLayers
           layers={visibleIndicatorLayers}
           indicatorsData={indicatorsData}
+          featureTipo={featureTipo}
         />
 
         <MarkersLayer data={points} />
@@ -569,6 +578,8 @@ export default function LidiaMap() {
         onToggleLayer={handleToggleLayer}
         onChangeVisualization={handleChangeVisualization}
         onChangeColorScale={handleChangeColorScale}
+        featureTipo={featureTipo}
+        onChangeFeatureTipo={setFeatureTipo}
         collapsed={layersControlCollapsed}
       />
     </div>

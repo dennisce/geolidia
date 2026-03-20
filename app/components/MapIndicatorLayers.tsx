@@ -1,13 +1,16 @@
 import type { IndicatorLayerConfig } from "./LayersControl"
 import { Tiles } from "./Tiles"
 import { HeatmapLayer } from "./HeatmapLayer"
+import type { FeatureTipo, IndicatorPayload } from "./tiles.helpers"
 
 export function MapIndicatorLayers({
   layers,
-  colorScale,
+  indicatorsData,
+  featureTipo,
 }: {
   layers: IndicatorLayerConfig[]
-  colorScale: any
+  indicatorsData: IndicatorPayload
+  featureTipo: FeatureTipo
 }) {
   return (
     <>
@@ -15,9 +18,11 @@ export function MapIndicatorLayers({
         if (layer.visualization === "choropleth") {
           return (
             <Tiles
-              key={layer.key}
+              key={`${layer.key}-choropleth-${featureTipo}`}
               uf={layer.uf}
+              featureTipo={featureTipo}
               indicators={[layer.key]}
+              indicatorsData={indicatorsData}
               colorIndicator={layer.key}
               colorScale={layer.colorScale}
               visible={true}
@@ -31,8 +36,10 @@ export function MapIndicatorLayers({
         if (layer.visualization === "heatmap") {
           return (
             <HeatmapLayer
-              key={layer.key}
+              key={`${layer.key}-heatmap-${featureTipo}`}
               indicator={layer}
+              indicatorsData={indicatorsData}
+              featureTipo={featureTipo}
             />
           )
         }

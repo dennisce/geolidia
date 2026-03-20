@@ -1,5 +1,5 @@
 import { HelpTip } from "./HelpTip"
-import type { ColorScaleKey } from "./tiles.helpers"
+import type { ColorScaleKey, FeatureTipo } from "./tiles.helpers"
 
 export type IndicatorKey =
   | "total_domicilios"
@@ -26,6 +26,8 @@ type Props = {
   onToggleLayer: (key: IndicatorKey, next: boolean) => void
   onChangeVisualization: (key: IndicatorKey, next: VisualizationType) => void
   onChangeColorScale: (key: IndicatorKey, next: ColorScaleKey) => void
+  featureTipo: FeatureTipo
+  onChangeFeatureTipo: (next: FeatureTipo) => void
   collapsed?: boolean
 }
 
@@ -71,20 +73,19 @@ export function LayersControl({
   onToggleLayer,
   onChangeVisualization,
   onChangeColorScale,
+  featureTipo,
+  onChangeFeatureTipo,
   collapsed = false,
 }: Props) {
   return (
-    <div className={`
-                    absolute left-4 top-24 z-[9999] w-[360px]
-                    bg-black/40 backdrop-blur-xl
-                    border border-white/10
-                    rounded-2xl
-                    shadow-[0_0_40px_rgba(124,58,237,0.15)]
-                    overflow-hidden
-                    transition-all duration-300
-                    ${collapsed ? "w-0 opacity-0 pointer-events-none p-0 border-transparent" : "w-[360px] opacity-100 p-4"}
-                  `}>
-      <div className="rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-md shadow-xl">
+    <div className="absolute left-4 top-24 z-[9999] w-[360px]">
+      <div
+        className={`
+          rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-md shadow-xl
+          overflow-hidden transition-all duration-300
+          ${collapsed ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[90vh] opacity-100"}
+        `}
+      >
         <div className="px-4 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-900">Camadas</h3>
           <p className="mt-1 text-xs text-gray-500">
@@ -92,111 +93,104 @@ export function LayersControl({
           </p>
         </div>
 
-        <div className="max-h-[70vh] overflow-auto p-2 space-y-2">
+        <div className="px-4 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-900">Geometrias exibidas</span>
+            <HelpTip text="Aplica a visualização de bairros e setores censitários para todos os indicadores do mapa." />
+          </div>
+
+          <div className="mt-3">
+            <select
+              value={featureTipo}
+              onChange={(e) => onChangeFeatureTipo(e.target.value as FeatureTipo)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-violet-400"
+            >
+              <option value="bairro">Apenas bairros</option>
+              <option value="bairro,setor">Bairros e setores censitários</option>
+              <option value="setor">Apenas setores censitários</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto px-4 py-4 space-y-4">
           {layers.map((layer) => (
             <div
               key={layer.key}
-              className="rounded-xl border border-gray-100 bg-white shadow-sm px-3 py-3 space-y-3"
+              className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm"
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center min-w-0">
-                    <span className="text-sm font-semibold text-gray-900 truncate">
-                      {layer.label}
-                    </span>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-semibold text-gray-900">{layer.label}</h4>
                     <HelpTip text={layer.desc} />
                   </div>
-
-                  <div className="text-[11px] text-gray-500 truncate">
-                    UF: {layer.uf} • {layer.key}
-                  </div>
+                  <p className="mt-1 text-xs text-gray-500">{layer.desc}</p>
                 </div>
 
-                <label className="flex items-center gap-2 text-xs text-gray-600 shrink-0">
-                  <span>{layer.visible ? "Ativa" : "Inativa"}</span>
+                <label className="inline-flex cursor-pointer items-center">
                   <input
                     type="checkbox"
+                    className="peer sr-only"
                     checked={layer.visible}
                     onChange={(e) => onToggleLayer(layer.key, e.target.checked)}
-                    className="h-4 w-4"
                   />
+                  <div className="peer relative h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-violet-600 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
                 </label>
               </div>
 
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-gray-600">
-                  Visualização
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    Visualização
+                  </label>
+                  <select
+                    value={layer.visualization}
+                    onChange={(e) =>
+                      onChangeVisualization(layer.key, e.target.value as VisualizationType)
+                    }
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-violet-400"
+                  >
+                    {layer.supportedVisualizations.map((option) => (
+                      <option key={option} value={option}>
+                        {option === "choropleth" ? "Coroplético" : "Mapa de calor"}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <select
-                  value={layer.visualization}
-                  onChange={(e) =>
-                    onChangeVisualization(
-                      layer.key,
-                      e.target.value as VisualizationType
-                    )
-                  }
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-violet-500"
-                >
-                  {layer.supportedVisualizations.map((v) => (
-                    <option key={v} value={v}>
-                      {v === "choropleth" ? "Mapa por região" : "Mapa de calor"}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              <div className="space-y-2">
-                <div className="text-[11px] font-medium text-gray-600">Cor</div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                    Escala de cor
+                  </label>
+                  <select
+                    value={layer.colorScale}
+                    onChange={(e) =>
+                      onChangeColorScale(layer.key, e.target.value as ColorScaleKey)
+                    }
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-violet-400"
+                  >
+                    {COLOR_OPTIONS.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {COLOR_OPTIONS.map((option) => {
-                    const selected = layer.colorScale === option.key
-
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => onChangeColorScale(layer.key, option.key)}
-                        className={[
-                          "rounded-xl border px-2 py-2 text-left transition",
-                          selected
-                            ? "border-violet-500 ring-2 ring-violet-200 bg-violet-50"
-                            : "border-gray-200 hover:border-gray-300 bg-white",
-                        ].join(" ")}
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-gray-800">
-                            {option.label}
-                          </span>
-                          {selected && (
-                            <span className="text-[10px] font-semibold text-violet-600">
-                              Ativa
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-5 overflow-hidden rounded-md">
-                          {option.preview.map((color) => (
-                            <div
-                              key={color}
-                              className="h-4"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </button>
-                    )
-                  })}
+                  <div className="mt-2 flex h-2 overflow-hidden rounded-full">
+                    {(COLOR_OPTIONS.find((c) => c.key === layer.colorScale)?.preview ?? []).map(
+                      (color) => (
+                        <div
+                          key={color}
+                          className="h-full flex-1"
+                          style={{ backgroundColor: color }}
+                        />
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           ))}
-        </div>
-
-        <div className="px-4 py-3 border-t border-gray-100">
-          <p className="text-[11px] text-gray-500">
-            Dica: passe o mouse no <span className="font-semibold">?</span> para ver a descrição.
-          </p>
         </div>
       </div>
     </div>
