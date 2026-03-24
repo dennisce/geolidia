@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef } from "react"
 import { useMap } from "react-leaflet"
 import L from "leaflet"
+
+import Supercluster from "supercluster"
+import type { PointFeature } from "supercluster"
+
 import type { IndicatorLayerConfig } from "./LayersControl"
-import type { ColorScaleKey, FeatureTipo, IndicatorPayload } from "./tiles.helpers"
+import type { FeatureTipo, IndicatorPayload } from "./tiles.helpers"
 import { getColorScaleColors } from "./tiles.helpers"
 
 type PointRow = {
@@ -10,8 +14,19 @@ type PointRow = {
   lat: number
   lon: number
   rawValue: number
-  normalized: number
 }
+
+type ClusterProps = {
+  id?: string
+  rawValue: number
+  count: number
+}
+
+type ClusterFeature = PointFeature<ClusterProps>
+type BBox = [number, number, number, number]
+
+const CLUSTER_RADIUS = 100
+const CLUSTER_MAX_ZOOM = 15
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(value, max))
@@ -24,12 +39,11 @@ function normalizeValue(value: number, minValue: number, maxValue: number) {
   return clamp((value - minValue) / (maxValue - minValue), 0, 1)
 }
 
-function getColorScale(scale: ColorScaleKey): string[] {
-    return getColorScaleColors(scale) || getColorScaleColors("reds")
-}
-
-function getColorForNormalizedValue(normalized: number, scale: ColorScaleKey) {
-  const colors = getColorScale(scale)
+function getColorForNormalizedValue(
+  normalized: number,
+  scale: IndicatorLayerConfig["colorScale"]
+) {
+  const colors = getColorScaleColors(scale)
 
   if (normalized <= 0.2) return colors[0]
   if (normalized <= 0.4) return colors[1]
@@ -39,10 +53,14 @@ function getColorForNormalizedValue(normalized: number, scale: ColorScaleKey) {
 }
 
 function getRadius(normalized: number) {
-  const minRadius = 6
-  const maxRadius = 20
+  const clamped = clamp(normalized, 0, 1)
 
-  return minRadius + normalized * (maxRadius - minRadius)
+  const minRadius = 6
+  const maxRadius = 28
+
+  const scaled = Math.sqrt(clamped)
+
+  return minRadius + scaled * (maxRadius - minRadius)
 }
 
 function shouldIncludeFeature(featureId: string, featureTipo: FeatureTipo) {
@@ -50,6 +68,27 @@ function shouldIncludeFeature(featureId: string, featureTipo: FeatureTipo) {
   if (featureTipo === "bairro") return featureId.startsWith("bairro_")
   if (featureTipo === "setor") return featureId.startsWith("setor_")
   return true
+}
+
+function getMapBoundsBBox(map: L.Map): BBox {
+  const bounds = map.getBounds()
+  return [
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth(),
+  ]
+}
+
+function getSafeZoom(map: L.Map) {
+  const zoom = map.getZoom()
+  return Number.isFinite(zoom) ? Math.round(zoom) : 0
+}
+
+function formatValue(value: number) {
+  return value.toLocaleString("pt-BR", {
+    maximumFractionDigits: 2,
+  })
 }
 
 export function CentroidLayer({
@@ -78,18 +117,49 @@ export function CentroidLayer({
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
         if (!Number.isFinite(rawValue) || rawValue <= 0) return null
 
-        const normalized = normalizeValue(rawValue, minValue, maxValue)
-
         return {
           id: featureId,
           lat,
           lon,
           rawValue,
-          normalized,
         }
       })
       .filter((item): item is PointRow => item !== null)
-  }, [indicatorsData, featureTipo, indicator.key, minValue, maxValue])
+  }, [indicatorsData, featureTipo, indicator.key])
+
+  const clusterIndex = useMemo(() => {
+    const index = new Supercluster<ClusterProps, ClusterProps>({
+      radius: CLUSTER_RADIUS,
+      maxZoom: CLUSTER_MAX_ZOOM,
+      minPoints: 1,
+
+      map: (props) => ({
+        rawValue: props.rawValue,
+        count: 1,
+      }),
+
+      reduce: (accumulated, props) => {
+        accumulated.rawValue += props.rawValue
+        accumulated.count += props.count
+      },
+    })
+
+    const features: ClusterFeature[] = points.map((point) => ({
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [point.lon, point.lat],
+      },
+      properties: {
+        id: point.id,
+        rawValue: point.rawValue,
+        count: 1,
+      },
+    }))
+
+    index.load(features)
+    return index
+  }, [points])
 
   useEffect(() => {
     const paneName = `centroid-pane-${indicator.key}`
@@ -111,49 +181,99 @@ export function CentroidLayer({
 
     const group = L.layerGroup([], { pane: paneName })
 
-    points.forEach((point) => {
-      const fillColor = getColorForNormalizedValue(point.normalized, indicator.colorScale)
-      const radius = getRadius(point.normalized)
+    const render = () => {
+      group.clearLayers()
 
-      const circle = L.circleMarker([point.lat, point.lon], {
-        pane: paneName,
-        radius,
-        stroke: true,
-        weight: 1,
-        color: "#ffffff",
-        opacity: 0.8,
-        fill: true,
-        fillColor,
-        fillOpacity: 0.75,
-      })
+      const bbox = getMapBoundsBBox(map)
+      const zoom = getSafeZoom(map)
+      const features = clusterIndex.getClusters(bbox, zoom)
 
-      circle.bindTooltip(
-        `
-          <div style="min-width: 140px;">
-            <div><strong>${indicator.label}</strong></div>
-            <div>Valor: ${point.rawValue.toLocaleString("pt-BR")}</div>
-          </div>
-        `,
-        {
+      features.forEach((feature) => {
+        const [lon, lat] = feature.geometry.coordinates
+        const props = feature.properties
+
+        if (!props) return
+
+        const clusterMeta = feature.properties as ClusterProps & {
+          cluster?: boolean
+          point_count?: number
+        }
+
+        const isCluster = Boolean(clusterMeta.cluster)
+        const count = isCluster
+          ? Number(clusterMeta.point_count ?? props.count ?? 1)
+          : Number(props.count ?? 1)
+
+        const rawValue = Number(props.rawValue ?? 0)
+        const normalized = normalizeValue(rawValue, minValue, maxValue)
+
+        const fillColor = getColorForNormalizedValue(
+          normalized,
+          indicator.colorScale
+        )
+        const radius = getRadius(normalized)
+
+        const circle = L.circleMarker([lat, lon], {
+          pane: paneName,
+          radius,
+          stroke: true,
+          weight: isCluster ? 2 : 1,
+          color: "#ffffff",
+          opacity: 0.9,
+          fill: true,
+          fillColor,
+          fillOpacity: isCluster ? 0.85 : 0.75,
+        })
+
+        const tooltip = isCluster
+          ? `
+            <div style="min-width: 180px;">
+              <div><strong>${indicator.label}</strong></div>
+              <div>Agrupados: ${count.toLocaleString("pt-BR")}</div>
+              <div>Valor acumulado: ${formatValue(rawValue)}</div>
+            </div>
+          `
+          : `
+            <div style="min-width: 140px;">
+              <div><strong>${indicator.label}</strong></div>
+              <div>Valor: ${formatValue(rawValue)}</div>
+            </div>
+          `
+
+        circle.bindTooltip(tooltip, {
           direction: "top",
           sticky: true,
           opacity: 0.95,
-        }
-      )
+        })
 
-      group.addLayer(circle)
-    })
+        group.addLayer(circle)
+      })
+    }
 
+    render()
     group.addTo(map)
     layerRef.current = group
 
+    map.on("zoomend moveend", render)
+
     return () => {
+      map.off("zoomend moveend", render)
+
       if (layerRef.current) {
         layerRef.current.remove()
         layerRef.current = null
       }
     }
-  }, [map, points, indicator.key, indicator.label, indicator.colorScale])
+  }, [
+    map,
+    points,
+    clusterIndex,
+    indicator.key,
+    indicator.label,
+    indicator.colorScale,
+    minValue,
+    maxValue,
+  ])
 
   return null
 }

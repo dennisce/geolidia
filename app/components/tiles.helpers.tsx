@@ -238,3 +238,43 @@ export type VisualizationType = keyof typeof VISUALIZATIONS
 export function getVisualizationLabel(type: VisualizationType): string {
   return VISUALIZATIONS[type]?.label ?? type
 }
+
+export type UfCode =
+  | 11 | 12 | 13 | 14 | 15 | 16 | 17
+  | 21 | 22 | 23 | 24 | 25 | 26 | 27 
+  | 28 | 29 | 31 | 32 | 33 | 35 | 41 
+  | 42 | 43 | 50 | 51 | 52 | 53
+
+export const UF_OPTIONS: Array<{
+  code: UfCode
+  sigla: string
+  label: string
+}> = [
+  { code: 11, sigla: "RO", label: "Rondônia" },
+  { code: 12, sigla: "AC", label: "Acre" },
+  { code: 13, sigla: "AM", label: "Amazonas" },
+  { code: 14, sigla: "RR", label: "Roraima" },
+  { code: 15, sigla: "PA", label: "Pará" },
+  { code: 16, sigla: "AP", label: "Amapá" },
+  { code: 17, sigla: "TO", label: "Tocantins" },
+  { code: 21, sigla: "MA", label: "Maranhão" },
+  { code: 22, sigla: "PI", label: "Piauí" },
+  { code: 23, sigla: "CE", label: "Ceará" },
+  { code: 24, sigla: "RN", label: "Rio Grande do Norte" },
+  { code: 25, sigla: "PB", label: "Paraíba" },
+  { code: 26, sigla: "PE", label: "Pernambuco" },
+  { code: 27, sigla: "AL", label: "Alagoas" },
+  { code: 28, sigla: "SE", label: "Sergipe" },
+  { code: 29, sigla: "BA", label: "Bahia" },
+  { code: 31, sigla: "MG", label: "Minas Gerais" },
+  { code: 32, sigla: "ES", label: "Espírito Santo" },
+  { code: 33, sigla: "RJ", label: "Rio de Janeiro" },
+  { code: 35, sigla: "SP", label: "São Paulo" },
+  { code: 41, sigla: "PR", label: "Paraná" },
+  { code: 42, sigla: "SC", label: "Santa Catarina" },
+  { code: 43, sigla: "RS", label: "Rio Grande do Sul" },
+  { code: 50, sigla: "MS", label: "Mato Grosso do Sul" },
+  { code: 51, sigla: "MT", label: "Mato Grosso" },
+  { code: 52, sigla: "GO", label: "Goiás" },
+  { code: 53, sigla: "DF", label: "Distrito Federal" },
+]

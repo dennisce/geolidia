@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { MapContainer, TileLayer, useMap } from "react-leaflet"
+
 import L from "leaflet"
+
 import "leaflet/dist/leaflet.css"
 import "leaflet.markercluster"
 import "leaflet.heat"
@@ -8,20 +10,22 @@ import "leaflet.markercluster/dist/MarkerCluster.css"
 import "leaflet.markercluster/dist/MarkerCluster.Default.css"
 
 import { getAssistantLoadingMessage } from "./assistantLoadingMessage"
-import { Tiles } from "./Tiles"
+
 import {
   LayersControl,
   type IndicatorKey,
   type IndicatorLayerConfig,
   type VisualizationType,
 } from "./LayersControl"
+
 import {
   buildIndicatorsUrl,
   type ColorScaleKey,
   type IndicatorPayload,
   type FeatureTipo,
+  type UfCode,
 } from "./tiles.helpers"
-import { HeatmapLayer } from "./HeatmapLayer"
+
 import { MapIndicatorLayers } from "./MapIndicatorLayers"
 
 type JsonItems = Array<{
@@ -49,6 +53,23 @@ const INDICATORS_BASE_URL = "https://tiles.opusapp.com.br"
 const INDICATOR_SCALE: Record<IndicatorKey, { min: number; max: number }> = {
   total_domicilios: { min: 0, max: 25000 },
   renda_media: { min: 0, max: 1000 },
+}
+
+function getIndicatorMaxFromPayload(
+  payload: IndicatorPayload,
+  key: IndicatorKey
+): number {
+  const values = Object.values(payload)
+    .map((row) => Number(row[key]))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+
+  if (!values.length) {
+    return INDICATOR_SCALE[key].max
+  }
+
+  const max = Math.max(...values)
+
+  return max > 0 ? max : INDICATOR_SCALE[key].max
 }
 
 function AssistantToast({
@@ -239,13 +260,14 @@ export default function LidiaMap() {
   const [indicatorsData, setIndicatorsData] = useState<IndicatorPayload>({})
   const [layersControlCollapsed, setLayersControlCollapsed] = useState(false)
   const [featureTipo, setFeatureTipo] = useState<FeatureTipo>("bairro,setor")
+  const [uf, setUf] = useState<UfCode>(23)
 
   const [indicatorLayers, setIndicatorLayers] = useState<IndicatorLayerConfig[]>([
     {
       key: "total_domicilios",
       label: "Total de domicílios",
       desc: "Total de domicílios por bairro ou setor censitário.",
-      uf: 23,
+      uf,
       visible: false,
       visualization: "choropleth",
       supportedVisualizations: ["choropleth", "heatmap", "centroid"],
@@ -258,7 +280,7 @@ export default function LidiaMap() {
       key: "renda_media",
       label: "Renda média",
       desc: "Renda média por bairro ou setor censitário.",
-      uf: 23,
+      uf,
       visible: false,
       visualization: "choropleth",
       supportedVisualizations: ["choropleth", "heatmap", "centroid"],
@@ -295,19 +317,19 @@ export default function LidiaMap() {
     return Array.from(new Set(visibleIndicatorLayers.map((layer) => layer.key)))
   }, [visibleIndicatorLayers])
 
-  const sharedUf = useMemo(() => {
-    return visibleIndicatorLayers[0]?.uf
-  }, [visibleIndicatorLayers])
+  // const sharedUf = useMemo(() => {
+  //   return visibleIndicatorLayers[0]?.uf
+  // }, [visibleIndicatorLayers])
 
   const indicatorsUrl = useMemo(() => {
-    if (!activeIndicatorKeys.length) return null
+  if (!activeIndicatorKeys.length) return null
 
-    return buildIndicatorsUrl({
-      baseUrl: INDICATORS_BASE_URL,
-      indicators: activeIndicatorKeys,
-      uf: sharedUf,
-    })
-  }, [activeIndicatorKeys, sharedUf])
+  return buildIndicatorsUrl({
+    baseUrl: INDICATORS_BASE_URL,
+    indicators: activeIndicatorKeys,
+    uf,
+  })
+}, [activeIndicatorKeys, uf])
 
   const showAssistantToast = useCallback((message: string) => {
     setShowToast(false)
@@ -420,6 +442,19 @@ export default function LidiaMap() {
     }
   }, [indicatorsUrl])
 
+  useEffect(() => {
+    if (!Object.keys(indicatorsData).length) return
+
+    setIndicatorLayers((prev) =>
+      prev.map((layer) => ({
+        ...layer,
+        uf,
+        minValue: INDICATOR_SCALE[layer.key].min,
+        maxValue: getIndicatorMaxFromPayload(indicatorsData, layer.key),
+      }))
+    )
+  }, [indicatorsData, uf])
+
   const handleToggleLayer = useCallback((key: IndicatorKey, next: boolean) => {
     setIndicatorLayers((prev) =>
       prev.map((layer) =>
@@ -504,6 +539,8 @@ export default function LidiaMap() {
         featureTipo={featureTipo}
         onChangeFeatureTipo={setFeatureTipo}
         collapsed={layersControlCollapsed}
+        uf={uf}
+        onChangeUf={setUf}
       />
     </div>
   )
