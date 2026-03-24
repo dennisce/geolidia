@@ -246,9 +246,9 @@ export default function LidiaMap() {
       label: "Total de domicílios",
       desc: "Total de domicílios por bairro ou setor censitário.",
       uf: 23,
-      visible: true,
+      visible: false,
       visualization: "choropleth",
-      supportedVisualizations: ["choropleth", "heatmap"],
+      supportedVisualizations: ["choropleth", "heatmap", "centroid"],
       colorScale: "reds",
       minZoom: 7,
       minValue: INDICATOR_SCALE.total_domicilios.min,
@@ -259,15 +259,32 @@ export default function LidiaMap() {
       label: "Renda média",
       desc: "Renda média por bairro ou setor censitário.",
       uf: 23,
-      visible: true,
+      visible: false,
       visualization: "choropleth",
-      supportedVisualizations: ["choropleth", "heatmap"],
+      supportedVisualizations: ["choropleth", "heatmap", "centroid"],
       colorScale: "blues",
       minZoom: 7,
       minValue: INDICATOR_SCALE.renda_media.min,
       maxValue: INDICATOR_SCALE.renda_media.max,
     },
   ])
+
+  const handleChangeMaxValue = (
+    key: IndicatorKey,
+    next: number | undefined
+  ) => {
+    setIndicatorLayers((prev) =>
+      prev.map((layer) =>
+        layer.key === key
+          ? {
+              ...layer,
+              minValue: 0,
+              maxValue: next,
+            }
+          : layer
+      )
+    )
+  }
 
   const visibleIndicatorLayers = useMemo(
     () => indicatorLayers.filter((layer) => layer.visible),
@@ -483,6 +500,7 @@ export default function LidiaMap() {
         onToggleLayer={handleToggleLayer}
         onChangeVisualization={handleChangeVisualization}
         onChangeColorScale={handleChangeColorScale}
+        onChangeMaxValue={handleChangeMaxValue}
         featureTipo={featureTipo}
         onChangeFeatureTipo={setFeatureTipo}
         collapsed={layersControlCollapsed}

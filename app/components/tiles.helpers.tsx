@@ -23,17 +23,59 @@ export type ColorScaleKey =
   | "yellow"
   | "indigo"
 
-export const COLOR_SCALES: Record<ColorScaleKey, string[]> = {
-  reds: ["#fee2e2", "#fecaca", "#fca5a5", "#ef4444", "#b91c1c"],
-  blues: ["#dbeafe", "#93c5fd", "#60a5fa", "#2563eb", "#1d4ed8"],
-  greens: ["#dcfce7", "#86efac", "#4ade80", "#16a34a", "#166534"],
-  purples: ["#f3e8ff", "#d8b4fe", "#c084fc", "#9333ea", "#6b21a8"],
-  oranges: ["#ffedd5", "#fdba74", "#fb923c", "#ea580c", "#9a3412"],
-  teal: ["#ccfbf1", "#99f6e4", "#5eead4", "#0d9488", "#115e59"],
-  pink: ["#fce7f3", "#f9a8d4", "#f472b6", "#db2777", "#9d174d"],
-  slate: ["#e2e8f0", "#cbd5e1", "#94a3b8", "#475569", "#1e293b"],
-  yellow: ["#fef9c3", "#fde68a", "#facc15", "#ca8a04", "#854d0e"],
-  indigo: ["#e0e7ff", "#a5b4fc", "#818cf8", "#4f46e5", "#312e81"],
+export const COLOR_SCALES = {
+  reds: {
+    label: "Vermelho",
+    colors: ["#fee2e2", "#fecaca", "#fca5a5", "#ef4444", "#b91c1c"],
+  },
+  blues: {
+    label: "Azul",
+    colors: ["#dbeafe", "#93c5fd", "#60a5fa", "#2563eb", "#1d4ed8"],
+  },
+  greens: {
+    label: "Verde",
+    colors: ["#dcfce7", "#86efac", "#4ade80", "#16a34a", "#166534"],
+  },
+  purples: {
+    label: "Roxo",
+    colors: ["#f3e8ff", "#d8b4fe", "#c084fc", "#9333ea", "#6b21a8"],
+  },
+  oranges: {
+    label: "Laranja",
+    colors: ["#ffedd5", "#fdba74", "#fb923c", "#ea580c", "#9a3412"],
+  },
+  teal: {
+    label: "Turquesa",
+    colors: ["#ccfbf1", "#99f6e4", "#5eead4", "#0d9488", "#115e59"],
+  },
+  pink: {
+    label: "Rosa",
+    colors: ["#fce7f3", "#f9a8d4", "#f472b6", "#db2777", "#9d174d"],
+  },
+  slate: {
+    label: "Cinza",
+    colors: ["#e2e8f0", "#cbd5e1", "#94a3b8", "#475569", "#1e293b"],
+  },
+  yellow: {
+    label: "Amarelo",
+    colors: ["#fef9c3", "#fde68a", "#facc15", "#ca8a04", "#854d0e"],
+  },
+  indigo: {
+    label: "Índigo",
+    colors: ["#e0e7ff", "#a5b4fc", "#818cf8", "#4f46e5", "#312e81"],
+  },
+}
+
+export function getColorScale(key: ColorScaleKey) {
+  return COLOR_SCALES[key]
+}
+
+export function getColorScaleColors(key: ColorScaleKey): string[] {
+  return COLOR_SCALES[key].colors
+}
+
+export function getColorScaleLabel(key: ColorScaleKey): string {
+  return COLOR_SCALES[key].label
 }
 
 export type TilesProps = {
@@ -71,7 +113,7 @@ export function getColor(
   value: number,
   minValue: number,
   maxValue: number,
-  scale: string[] = COLOR_SCALES.reds
+  scale: string[] = getColorScaleColors("reds")
 ): string {
   if (!Number.isFinite(value)) return scale[0]
   if (maxValue <= minValue) return scale[0]
@@ -159,11 +201,11 @@ export function buildStyleFor({
     const tipo = props?.feature_tipo
     const featureId = String(props?.feature_id ?? "")
     const value = getIndicatorValue(indicators, featureId, colorIndicator)
-    const palette = COLOR_SCALES[colorScale] ?? COLOR_SCALES.reds
+    const palette = getColorScale(colorScale) ?? getColorScale("reds")
 
     return {
       fill: true,
-      fillColor: getColor(value, minValue, maxValue, palette),
+      fillColor: getColor(value, minValue, maxValue, palette.colors),
       fillOpacity: tipo === "setor" ? 0.45 : 0.7,
       stroke: true,
       color: tipo === "setor" ? "#2563eb" : "#1e3a8a",
@@ -171,4 +213,28 @@ export function buildStyleFor({
       weight: tipo === "setor" ? 0.5 : 1,
     }
   }
+}
+
+export const VISUALIZATIONS = {
+  choropleth: {
+    label: "Coroplético",
+    icon: "map",
+    description: "Coloração por área",
+  },
+  centroid: {
+    label: "Centroides proporcionais",
+    icon: "dot",
+    description: "Pontos proporcionais ao valor",
+  },
+  heatmap: {
+    label: "Mapa de calor",
+    icon: "fire",
+    description: "Distribuição de calor por ocorrência em área",
+  },
+} as const
+
+export type VisualizationType = keyof typeof VISUALIZATIONS
+
+export function getVisualizationLabel(type: VisualizationType): string {
+  return VISUALIZATIONS[type]?.label ?? type
 }

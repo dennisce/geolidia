@@ -2,6 +2,7 @@ import type { IndicatorLayerConfig } from "./LayersControl"
 import { Tiles } from "./Tiles"
 import { HeatmapLayer } from "./HeatmapLayer"
 import type { FeatureTipo, IndicatorPayload } from "./tiles.helpers"
+import { CentroidLayer } from "./CentroidLayer"
 
 export function MapIndicatorLayers({
   layers,
@@ -25,7 +26,7 @@ export function MapIndicatorLayers({
               indicatorsData={indicatorsData}
               colorIndicator={layer.key}
               colorScale={layer.colorScale}
-              visible={true}
+              visible={layer.visible}
               minZoom={layer.minZoom}
               minValue={layer.minValue}
               maxValue={layer.maxValue}
@@ -37,6 +38,15 @@ export function MapIndicatorLayers({
           return (
             <HeatmapLayer
               key={`${layer.key}-heatmap-${featureTipo}`}
+              indicator={layer}
+              indicatorsData={indicatorsData}
+              featureTipo={featureTipo}
+            />
+          )
+        } else if (layer.visualization === "centroid") {
+          return (
+            <CentroidLayer
+              key={`${layer.key}-centroid-${featureTipo}`}
               indicator={layer}
               indicatorsData={indicatorsData}
               featureTipo={featureTipo}
